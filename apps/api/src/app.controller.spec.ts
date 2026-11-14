@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
+import { PrismaService } from './prisma/prisma.service';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -8,15 +8,22 @@ describe('AppController', () => {
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        {
+          provide: PrismaService,
+          useValue: {
+            $queryRaw: async () => [{ '?column?': 1 }],
+          },
+        },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('health', () => {
+    it('should return the application health status', () => {
+      expect(appController.health()).toEqual({ status: 'ok' });
     });
   });
 });

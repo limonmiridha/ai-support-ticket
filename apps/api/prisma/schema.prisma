@@ -7,9 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  CUSTOMER
-  ADMIN
+enum TicketCategory {
+  GENERAL
+  TECHNICAL
+  BILLING
+  ACCOUNT
+  FEATURE_REQUEST
+  PRODUCT_ISSUE
+  DELIVERY
+  OTHER
 }
 
 enum TicketStatus {
@@ -27,31 +33,84 @@ enum TicketPriority {
   URGENT
 }
 
+enum Role {
+  CUSTOMER
+  AGENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+  tickets     Ticket[]
+}
+
 model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
   passwordHash String
-  role         UserRole @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  tickets Ticket[]
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+  tickets       Ticket[]
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  role           Role     @default(CUSTOMER)
+  createdAt      DateTime @default(now())
 
-  @@index([role])
-  @@map("users")
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Ticket {
-  id          String         @id @default(uuid())
-  title       String
-  description String
-  status      TicketStatus   @default(OPEN)
-  priority    TicketPriority @default(MEDIUM)
+  id             String         @id @default(uuid())
+  title          String
+  description    String
+  organizationId String
+  status         TicketStatus   @default(OPEN)
+  priority       TicketPriority @default(MEDIUM)
+  category       TicketCategory @default(OTHER)
 
-  customerId String
-  customer   User   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customerId   String
+  customer     User         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   aiAnalysis AiAnalysis?
 
@@ -60,18 +119,30 @@ model Ticket {
 
   @@index([customerId, createdAt])
   @@index([status, priority])
+  @@index([organizationId, createdAt])
   @@map("tickets")
 }
 
 model AiAnalysis {
-  id       String @id @default(uuid())
+  id String @id @default(uuid()) @db.Uuid
+
   ticketId String @unique
   ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  summary        String?
-  sentiment      String?
-  suggestedReply String?
-  confidence     Float?
+  category  String
+  priority  TicketPriority
+  sentiment Sentiment
+
+  summary           String
+  suggestedReply    String
+  recommendedAction String
+
+  model         String
+  promptVersion String
+
+  inputTokens  Int @default(0)
+  outputTokens Int @default(0)
+  totalTokens  Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
